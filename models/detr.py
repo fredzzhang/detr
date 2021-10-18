@@ -272,7 +272,7 @@ class PostProcess(nn.Module):
         assert target_sizes.shape[1] == 2
 
         prob = F.softmax(out_logits, -1)
-        scores, labels = prob[..., 1:].max(-1)
+        scores, labels = prob[..., :-1].max(-1)
 
         # convert to [x0, y0, x1, y1] format
         boxes = box_ops.box_cxcywh_to_xyxy(out_bbox)
