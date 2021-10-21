@@ -324,7 +324,7 @@ def build(args):
     model = DETR(
         backbone,
         transformer,
-        num_classes=91,
+        num_classes=num_classes,
         num_queries=args.num_queries,
         aux_loss=args.aux_loss,
     )
