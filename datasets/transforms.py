@@ -274,3 +274,10 @@ class Compose(object):
             format_string += "    {0}".format(t)
         format_string += "\n)"
         return format_string
+
+class ColorJitter(object):
+    def __init__(self, brightness=0, contrast=0, saturatio=0, hue=0):
+        self.color_jitter = T.ColorJitter(brightness, contrast, saturatio, hue)
+
+    def __call__(self, img, target):
+        return self.color_jitter(img), target
