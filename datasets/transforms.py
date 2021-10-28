@@ -22,7 +22,8 @@ def crop(image, target, region):
     # should we do something wrt the original size?
     target["size"] = torch.tensor([h, w])
 
-    fields = ["labels", "area"]
+    # fields = ["labels", "area"]
+    fields = ["labels", "object"]
 
     if "boxes" in target:
         boxes = target["boxes"]
@@ -35,20 +36,47 @@ def crop(image, target, region):
         target["area"] = area
         fields.append("boxes")
 
+    # Crop human and object boxes
+    if "boxes_h" in target:
+        boxes = target["boxes_h"]
+        max_size = torch.as_tensor([w, h], dtype=torch.float32)
+        cropped_boxes = boxes - torch.as_tensor([j, i, j, i])
+        cropped_boxes = torch.min(cropped_boxes.reshape(-1, 2, 2), max_size)
+        cropped_boxes = cropped_boxes.clamp(min=0)
+        area = (cropped_boxes[:, 1, :] - cropped_boxes[:, 0, :]).prod(dim=1)
+        target["boxes_h"] = cropped_boxes.reshape(-1, 4)
+        fields.append("boxes_h")
+    if "boxes_o" in target:
+        boxes = target["boxes_o"]
+        max_size = torch.as_tensor([w, h], dtype=torch.float32)
+        cropped_boxes = boxes - torch.as_tensor([j, i, j, i])
+        cropped_boxes = torch.min(cropped_boxes.reshape(-1, 2, 2), max_size)
+        cropped_boxes = cropped_boxes.clamp(min=0)
+        area = (cropped_boxes[:, 1, :] - cropped_boxes[:, 0, :]).prod(dim=1)
+        target["boxes_o"] = cropped_boxes.reshape(-1, 4)
+        fields.append("boxes_o")
+
     if "masks" in target:
         # FIXME should we update the area here if there are no boxes?
         target['masks'] = target['masks'][:, i:i + h, j:j + w]
         fields.append("masks")
 
     # remove elements for which the boxes or masks that have zero area
-    if "boxes" in target or "masks" in target:
+    if "boxes" in target or "masks" in target or "boxes_h" in target or "boxes_o" in target:
         # favor boxes selection when defining which elements to keep
         # this is compatible with previous implementation
         if "boxes" in target:
             cropped_boxes = target['boxes'].reshape(-1, 2, 2)
             keep = torch.all(cropped_boxes[:, 1, :] > cropped_boxes[:, 0, :], dim=1)
-        else:
+        elif "masks" in target:
             keep = target['masks'].flatten(1).any(1)
+        else:
+            cropped_bh = target['boxes_h'].reshape(-1, 2, 2)
+            cropped_bo = target['boxes_o'].reshape(-1, 2, 2)
+            keep = torch.logical_and(
+                torch.all(cropped_bh[:, 1, :] > cropped_bo[:, 0, :], dim=1),
+                torch.all(cropped_bo[:, 1, :] > cropped_bo[:, 0, :], dim=1)
+            )
 
         for field in fields:
             target[field] = target[field][keep]
@@ -66,6 +94,16 @@ def hflip(image, target):
         boxes = target["boxes"]
         boxes = boxes[:, [2, 1, 0, 3]] * torch.as_tensor([-1, 1, -1, 1]) + torch.as_tensor([w, 0, w, 0])
         target["boxes"] = boxes
+
+    # Flip human and object boxes
+    if "boxes_h" in target:
+        boxes = target["boxes_h"]
+        boxes = boxes[:, [2, 1, 0, 3]] * torch.as_tensor([-1, 1, -1, 1]) + torch.as_tensor([w, 0, w, 0])
+        target["boxes_h"] = boxes
+    if "boxes_o" in target:
+        boxes = target["boxes_o"]
+        boxes = boxes[:, [2, 1, 0, 3]] * torch.as_tensor([-1, 1, -1, 1]) + torch.as_tensor([w, 0, w, 0])
+        target["boxes_o"] = boxes
 
     if "masks" in target:
         target['masks'] = target['masks'].flip(-1)
@@ -116,6 +154,16 @@ def resize(image, target, size, max_size=None):
         boxes = target["boxes"]
         scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
         target["boxes"] = scaled_boxes
+
+    # Resize human and object boxes
+    if "boxes_h" in target:
+        boxes = target["boxes_h"]
+        scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
+        target["boxes_h"] = scaled_boxes
+    if "boxes_o" in target:
+        boxes = target["boxes_o"]
+        scaled_boxes = boxes * torch.as_tensor([ratio_width, ratio_height, ratio_width, ratio_height])
+        target["boxes_o"] = scaled_boxes
 
     if "area" in target:
         area = target["area"]
@@ -255,6 +303,18 @@ class Normalize(object):
             boxes = box_xyxy_to_cxcywh(boxes)
             boxes = boxes / torch.tensor([w, h, w, h], dtype=torch.float32)
             target["boxes"] = boxes
+
+        # Normalise human and object boxes
+        if "boxes_h" in target:
+            boxes = target["boxes_h"]
+            boxes = box_xyxy_to_cxcywh(boxes)
+            boxes = boxes / torch.tensor([w, h, w, h], dtype=torch.float32)
+            target["boxes_h"] = boxes
+        if "boxes_o" in target:
+            boxes = target["boxes_o"]
+            boxes = box_xyxy_to_cxcywh(boxes)
+            boxes = boxes / torch.tensor([w, h, w, h], dtype=torch.float32)
+            target["boxes_o"] = boxes
         return image, target
 
 
