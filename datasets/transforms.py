@@ -4,6 +4,8 @@ Transforms and data augmentation for both image + bbox.
 """
 import random
 
+from math import sqrt
+
 import PIL
 import torch
 import torchvision.transforms as T
@@ -73,7 +75,7 @@ def hflip(image, target):
     return flipped_image, target
 
 
-def resize(image, target, size, max_size=None):
+def resize(image, target, size, max_size=None, max_area=7.2e5):
     # size can be min_size (scalar) or (w, h) tuple
 
     def get_size_with_aspect_ratio(image_size, size, max_size=None):
@@ -102,7 +104,14 @@ def resize(image, target, size, max_size=None):
         else:
             return get_size_with_aspect_ratio(image_size, size, max_size)
 
-    size = get_size(image.size, size, max_size)
+    h, w = get_size(image.size, size, max_size)
+    # down scale the image with too many pixels
+    if h * w > max_area:
+        scale = sqrt(max_area / (h * w))
+        h = int(h * scale)
+        w = int(w * scale)
+    size = (h, w)
+
     rescaled_image = F.resize(image, size)
 
     if target is None:
